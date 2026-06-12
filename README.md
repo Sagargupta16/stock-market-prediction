@@ -95,7 +95,7 @@ The model evaluates performance using Mean Squared Error (MSE) for each stock:
 data_aapl, scaler_aapl = fetch_preprocess('AAPL', '2020-01-01', '2023-01-01')
 ```
 
-1. **Model Training**:
+2. **Model Training**:
 
 ```python
 # Train the LSTM model
@@ -103,7 +103,7 @@ model = LSTM()
 # Training loop with 150 epochs
 ```
 
-1. **Prediction and Evaluation**:
+3. **Prediction and Evaluation**:
 
 ```python
 # Evaluate model performance
@@ -123,7 +123,10 @@ actual_prices, predicted_prices = evaluate_model(test_sequences, scaler, model, 
 Stock-market-prediction/
 ├── SMP.ipynb           # Main Jupyter notebook with complete implementation
 ├── README.md           # Project documentation
-└── requirements.txt    # Python dependencies (create this file)
+├── requirements.txt    # Python dependencies
+├── CHANGELOG.md        # Release history
+├── SECURITY.md         # Security policy
+└── LICENSE             # MIT license
 ```
 
 ## 🔧 Technical Details
