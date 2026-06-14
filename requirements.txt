@@ -2,6 +2,6 @@ yfinance==1.4.1
 pandas==3.0.3
 torch==2.12.0
 scikit-learn==1.9.0
-matplotlib==3.10.9
+matplotlib==3.11.0
 numpy==2.4.6
 jupyter==1.1.1
