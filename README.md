@@ -2,7 +2,7 @@
 
 A comprehensive machine learning project that uses Long Short-Term Memory (LSTM) neural networks to predict stock prices for major technology companies. This project demonstrates the application of deep learning techniques in financial forecasting.
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Sagargupta16/Stock-market-prediction/blob/main/SMP.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Sagargupta16/stock-market-prediction/blob/main/SMP.ipynb)
 
 ## 🎯 Project Overview
 
@@ -32,8 +32,8 @@ pip install yfinance pandas torch scikit-learn matplotlib numpy
 1. Clone the repository:
 
 ```bash
-git clone https://github.com/Sagargupta16/Stock-market-prediction.git
-cd Stock-market-prediction
+git clone https://github.com/Sagargupta16/stock-market-prediction.git
+cd stock-market-prediction
 ```
 
 2. Install required dependencies:
@@ -120,7 +120,7 @@ actual_prices, predicted_prices = evaluate_model(test_sequences, scaler, model, 
 ## 📁 Project Structure
 
 ```text
-Stock-market-prediction/
+stock-market-prediction/
 ├── SMP.ipynb           # Main Jupyter notebook with complete implementation
 ├── README.md           # Project documentation
 ├── requirements.txt    # Python dependencies
@@ -175,7 +175,7 @@ This project is open source and available under the [MIT License](LICENSE).
 
 **Sagar Gupta** - [GitHub Profile](https://github.com/Sagargupta16)
 
-Project Link: [https://github.com/Sagargupta16/Stock-market-prediction](https://github.com/Sagargupta16/Stock-market-prediction)
+Project Link: [https://github.com/Sagargupta16/stock-market-prediction](https://github.com/Sagargupta16/stock-market-prediction)
 
 ## ⚠️ Disclaimer
 
