@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.2.1] - 2026-09-03
+
+- Raise torch pin to 2.13.0 to resolve torch.jit.script memory corruption advisory (Dependabot alert #2)
+
 ## [1.2.0] - 2026-03-16
 
 - Clear notebook outputs to reduce repo size
