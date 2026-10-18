@@ -5,3 +5,5 @@ scikit-learn==1.9.1
 matplotlib==3.11.2
 numpy==2.5.4
 jupyter==1.1.1
+chronos-forecasting==2.3.2
+pytest==9.1.1

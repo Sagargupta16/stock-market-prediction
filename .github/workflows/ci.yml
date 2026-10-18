@@ -20,3 +20,5 @@ jobs:
         run: |
           jupyter nbconvert --to python SMP.ipynb
           python -m py_compile SMP.py
+      - name: Unit tests
+        run: python -m pytest -q

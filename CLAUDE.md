@@ -10,14 +10,14 @@
 
 ## Project
 
-LSTM stock-price predictor for AAPL/MSFT/AMZN/TSLA, built as a single Jupyter notebook. Educational/demo project, runnable in Colab (badge in README).
+LSTM stock-price predictor for AAPL/MSFT/AMZN/TSLA. Two surfaces: `SMP.ipynb` (one-window Colab demo, badge in README) and the `smp/` package, a walk-forward benchmark of naive vs LSTM (price target) vs LSTM (log-return target) vs zero-shot Chronos-2, with permutation importance. Educational/evaluation project, not a trading signal.
 
 Public repo: [Sagargupta16/stock-market-prediction](https://github.com/Sagargupta16/stock-market-prediction). No deployed service.
 
 ## Stack
 
 - **Language**: Python 3.14 (pinned in `.python-version`)
-- **Framework**: PyTorch (nn.LSTM), scikit-learn (MinMaxScaler, MSE), yfinance, pandas, matplotlib
+- **Framework**: PyTorch (nn.LSTM), scikit-learn (MinMaxScaler, StandardScaler, MSE), yfinance, pandas, matplotlib, chronos-forecasting (Chronos-2 baseline), pytest
 - **Database**: none -- data fetched live from Yahoo Finance
 - **Package manager**: pip via `requirements.txt`, a uv-generated hash lock of `requirements.in` (Renovate monthly through its pip-compile manager)
 - **Deploy target**: none -- local Jupyter or Google Colab
@@ -29,19 +29,37 @@ pip install -r requirements.txt
 jupyter notebook SMP.ipynb
 ```
 
-Run cells top to bottom: fetch/preprocess -> model definition -> training -> test split -> evaluation -> moving averages -> feature importance.
+Run cells top to bottom: fetch/preprocess -> model definition -> training -> test split -> evaluation -> moving averages -> permutation importance.
+
+Benchmark (writes `results/benchmark.{json,md}` and `docs/*.png`, caches Yahoo CSVs in `data/cache/`, gitignored):
+
+```
+python -m smp.benchmark                # 8 folds x 30 days, 150 epochs, Chronos-2 (downloads amazon/chronos-2 from Hugging Face)
+python -m smp.benchmark --no-chronos   # offline after the first data fetch
+python -m smp.benchmark --end today    # latest data instead of 2020-2022
+```
 
 ## Test
 
-No test suite. Verification = notebook runs end to end and prints per-stock MSE.
+```
+python -m pytest -q
+```
+
+`tests/test_pipeline.py` is offline (synthetic random walks): feature alignment, fold boundaries, scaler-ignores-test-rows, windows never see the label row, inverse-scale round trip, metrics, permutation importance, seeded training, and an end-to-end `run_benchmark`. CI runs it after the notebook compile step.
 
 ## Entry points
 
-- `SMP.ipynb` -- the entire project: data fetch, LSTM definition, training, evaluation, plots
+- `SMP.ipynb` -- one-window demo: data fetch, LSTM definition, training, evaluation, plots
+- `python -m smp.benchmark` -- walk-forward benchmark CLI (`smp/benchmark.py:main`)
 
 ## Key files
 
-- `SMP.ipynb` -- all code lives here; there are no `.py` modules
+- `SMP.ipynb` -- self-contained so Colab can open it without the repo; it does NOT import `smp/`, so pipeline changes go in both places
+- `smp/data.py` -- yfinance load with CSV cache, `build_features` (price or log-return features; drops the first row in both modes so they score the same days)
+- `smp/evaluate.py` -- `fold_starts` (expanding, contiguous folds), leak-free `prepare_fold`, `to_price`, RMSE/MAPE/direction metrics
+- `smp/model.py` -- batch_first LSTM, seeded mini-batch `train_lstm`, CUDA if available
+- `smp/importance.py` -- permutation importance; `smp/chronos_baseline.py` -- Chronos-2 one-step median
+- `results/benchmark.md` -- the committed measured tables; README numbers are copied from here, never typed by hand
 - `requirements.in` -- direct pins (torch, yfinance, pandas, scikit-learn, matplotlib, numpy, jupyter); bump here, then rerun the command in `requirements.txt`'s header
 - `requirements.txt` -- generated `--generate-hashes` lock; CI installs it with `--require-hashes`, so never hand-edit a version in it
 
@@ -52,10 +70,13 @@ No test suite. Verification = notebook runs end to end and prints per-stock MSE.
 - Hold-out: `N = 30` (cell 1) is excluded from each stock's training windows AND from its scaler fit (`fetch_preprocess(..., test_days=N)`). Training windows are built per ticker; never build them on `data_combined` again (that leaked the test set and spanned tickers). `data_combined` only feeds the moving-average cell.
 - AMZN's test-window closes sit below its training min, so scaled test values can be slightly negative. That is expected, not a bug.
 - `evaluate_model()` prints a naive previous-close baseline MSE next to the model MSE; report both.
-- The last cell's "Illustrative Feature Weights" chart uses a hardcoded placeholder dict, not values computed from the model. Don't present it as a real result.
-- Training loops per-sequence with hidden-state resets (no batching); 150 epochs is slow on CPU (tens of minutes).
+- The last cell computes permutation importance on the held-out windows (10 shuffles per feature, seeded). It replaced a hardcoded placeholder chart in 1.4.0.
+- Training is mini-batched (batch 64, `torch.manual_seed(0)`, CUDA if present); the per-window loop it replaced took about 70 min on CPU.
 - GitHub repo name is lowercase `stock-market-prediction`; README and notebook Colab links both use it.
 - `create_inout_sequences` is defined twice (training and test cells); keep them in sync if editing.
+- Return-target LSTM predicts the standardized next-day log return; `to_price` maps it back with `prev_close * exp(r)`. Naive has no direction call (it predicts no change), so its direction cell is n/a and "Always up" is the direction baseline.
+- Chronos-2 is zero-shot: its pretraining data may include public prices from the test period, so treat its row as optimistic.
+- `fold_starts` needs at least 250 training windows in the first fold; 8 folds x 30 days fits 2020-2022, more folds need a longer `--start`.
 - CI exports the notebook with `jupyter nbconvert --to python` (not `--to script`: the kernelspec has no language_info, so `script` writes `SMP.txt`) and runs `py_compile` on it.
 
 ## Dataset
@@ -66,13 +87,14 @@ No test suite. Verification = notebook runs end to end and prints per-stock MSE.
 
 ## Training
 
-- Command: run the training cell in `SMP.ipynb` (150 epochs, Adam lr=0.001, MSELoss, seq_length=5, hidden=100)
-- Approx time: about 70 min on a laptop CPU for 150 epochs (measured 2026-10-18 via `nbconvert --execute`, per-sequence loop, no batching). Pass `--ExecutePreprocessor.timeout=7200` or the training cell times out at 3600s.
+- Command: run the training cell in `SMP.ipynb` (150 epochs, batch 64, Adam lr=0.001, MSELoss, seq_length=5, hidden=100), or `python -m smp.benchmark` (same settings, one model per fold and target)
+- Approx time: see the README Limitations and `results/benchmark.md` Run time table (both measured 2026-10-18)
 - Checkpoints: none -- model is never saved to disk
 
 ## Eval metric
 
-- MSE on the held-out last 30 days per stock, printed by `evaluate_model()` alongside the naive previous-close baseline; plots actual vs predicted
+- Notebook: MSE on the held-out last 30 days per stock, printed by `evaluate_model()` alongside the naive previous-close baseline; plots actual vs predicted
+- Benchmark: RMSE ($), MAPE (%), direction accuracy (%) per stock, mean and std over 8 folds, plus how many stock-folds each model beats naive on
 
 ## Artifacts
 
