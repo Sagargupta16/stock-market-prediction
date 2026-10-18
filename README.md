@@ -33,6 +33,9 @@ The project has two parts that share one pipeline:
 - **Three metrics**: RMSE in dollars, MAPE, and direction accuracy against coin-flip and always-up baselines
 - **Permutation importance**: computed on held-out windows, in both the notebook and the benchmark
 - **Multi-stock training**: one shared LSTM learns from all four tickers; each ticker keeps its own scaler so predictions map back to real dollar prices
+- **LSTM neural network**: `nn.LSTM` with 100 hidden units and a linear head, written from scratch in PyTorch
+- **Visualization**: actual vs predicted price charts per stock and 20-day and 50-day simple moving averages in the notebook, plus benchmark, last-fold and importance charts in [`docs/`](docs)
+- **Performance metrics**: Mean Squared Error per stock in dollars squared in the notebook, next to the naive baseline's
 - **Leak-free by construction**: scalers fit on training rows only, windows built per ticker, and unit tests that fail if a test row reaches training
 - **Fast and reproducible**: seeded mini-batch training (batch 64) that uses a GPU when present; the full notebook runs in about 3 minutes on a laptop CPU
 - **Live data fetching**: daily bars pulled from Yahoo Finance via `yfinance`; the benchmark caches them locally so reruns score identical data
