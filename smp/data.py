@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -13,13 +14,22 @@ CLOSE = FEATURES.index("Close")
 TARGETS = ("price", "return")
 
 
+def inside(path: str | Path, base: str | Path) -> Path:
+    """Resolve path and refuse it unless it stays under base."""
+    root = os.path.realpath(base)
+    real = os.path.realpath(path)
+    if real != root and not real.startswith(root + os.sep):
+        raise ValueError(f"{path} resolves outside {root}")
+    return Path(real)
+
+
 def load_ohlcv(
     ticker: str, start: str, end: str, cache_dir: Path | None = None
 ) -> pd.DataFrame:
     """Daily OHLCV bars from Yahoo Finance, cached as CSV so reruns are offline and identical."""
     cache = None
     if cache_dir is not None:
-        cache = Path(cache_dir) / f"{ticker}_{start}_{end}.csv"
+        cache = inside(Path(cache_dir) / f"{ticker}_{start}_{end}.csv", cache_dir)
         if cache.exists():
             return pd.read_csv(cache, index_col=0, parse_dates=True)
 

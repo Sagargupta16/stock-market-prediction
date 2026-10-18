@@ -19,7 +19,7 @@ import numpy as np
 import pandas as pd
 
 from . import __version__
-from .data import FEATURES, TARGETS, Series, build_features, load_ohlcv
+from .data import FEATURES, TARGETS, Series, build_features, inside, load_ohlcv
 from .evaluate import fold_starts, prepare_fold, score, to_price
 from .importance import permutation_importance
 from .model import pick_device, predict, train_lstm
@@ -44,19 +44,18 @@ class Config:
     chronos_model: str | None = "amazon/chronos-2"
 
 
-def run_benchmark(
-    frames: dict[str, pd.DataFrame], cfg: Config, chronos=None, log=print
-) -> dict:
-    """Score every model on every (ticker, fold); returns plain data for JSON."""
-    rows: list[dict] = []
-    importance: dict[str, list[list[float]]] = {}
-    timings: dict[str, float] = {}
-    last_fold: dict[str, dict[str, list[float]]] = {t: {} for t in cfg.tickers}
-    device = pick_device()
+@dataclass
+class _Results:
+    """Scores per (model, ticker, fold) plus the last fold's predictions for charts."""
 
-    def record(model, series: Series, k, test_rows, pred, with_direction=True):
+    folds: int
+    rows: list[dict] = field(default_factory=list)
+    last_fold: dict[str, dict[str, list]] = field(default_factory=dict)
+    up_days: list[dict] = field(default_factory=list)
+
+    def record(self, model, series: Series, k, test_rows, pred, with_direction=True):
         actual, prev = series.close[test_rows], series.prev_close[test_rows]
-        rows.append(
+        self.rows.append(
             {
                 "model": model,
                 "ticker": series.ticker,
@@ -66,14 +65,80 @@ def run_benchmark(
                 **score(actual, pred, prev, with_direction),
             }
         )
-        if k == cfg.folds - 1:
-            last_fold[series.ticker][model] = [float(v) for v in pred]
-            last_fold[series.ticker]["Actual"] = [float(v) for v in actual]
-            last_fold[series.ticker]["dates"] = [
-                str(series.dates[r].date()) for r in test_rows
-            ]
+        if k == self.folds - 1:
+            lf = self.last_fold.setdefault(series.ticker, {})
+            lf[model] = [float(v) for v in pred]
+            lf["Actual"] = [float(v) for v in actual]
+            lf["dates"] = [str(series.dates[r].date()) for r in test_rows]
 
-    up_days: list[dict] = []
+    def record_naive(self, series: Series, k, test_rows):
+        prev = series.prev_close[test_rows]
+        self.record("Naive", series, k, test_rows, prev, with_direction=False)
+        up = float(np.mean(series.close[test_rows] > prev) * 100)
+        self.up_days.append({"ticker": series.ticker, "fold": k, "always_up": up})
+
+
+def _lstm_fold(series, starts, k, target, cfg: Config, device, res: _Results, name):
+    """Train one fold on every ticker's history, score it and return importance."""
+    folds = {
+        t: prepare_fold(s, starts[t][k], cfg.test_days, cfg.seq_len, target)
+        for t, s in series.items()
+    }
+    x_train = np.concatenate([f.x_train for f in folds.values()])
+    y_train = np.concatenate([f.y_train for f in folds.values()])
+    model = train_lstm(
+        x_train,
+        y_train,
+        epochs=cfg.epochs,
+        batch_size=cfg.batch_size,
+        lr=cfg.lr,
+        hidden_size=cfg.hidden_size,
+        seed=cfg.seed + k,
+        device=device,
+    )
+    for t, f in folds.items():
+        s = series[t]
+        pred = to_price(predict(model, f.x_test), f.scaler, s, f.test_rows, target)
+        res.record(name, s, k, f.test_rows, pred)
+        if target == "price":
+            res.record_naive(s, k, f.test_rows)
+    x_test = np.concatenate([f.x_test for f in folds.values()])
+    y_test = np.concatenate([f.y_test for f in folds.values()])
+    imp = permutation_importance(
+        lambda x: predict(model, x),
+        x_test,
+        y_test,
+        repeats=cfg.importance_repeats,
+        seed=cfg.seed + k,
+    )
+    return [float(v) for v in imp], len(x_train)
+
+
+def _chronos_folds(chronos, series, starts, cfg: Config, res: _Results) -> None:
+    from .chronos_baseline import forecast_next_close
+
+    for t, s in series.items():
+        blocks = [np.arange(a, a + cfg.test_days) for a in starts[t]]
+        # Context for day j is every close strictly before day j
+        contexts = [
+            np.concatenate([s.prev_close[:1], s.close[:j]])
+            for rows_ in blocks
+            for j in rows_
+        ]
+        preds = forecast_next_close(chronos, contexts).reshape(cfg.folds, -1)
+        for k, rows_ in enumerate(blocks):
+            res.record("Chronos-2", s, k, rows_, preds[k])
+
+
+def run_benchmark(
+    frames: dict[str, pd.DataFrame], cfg: Config, chronos=None, log=print
+) -> dict:
+    """Score every model on every (ticker, fold); returns plain data for JSON."""
+    res = _Results(cfg.folds, last_fold={t: {} for t in cfg.tickers})
+    importance: dict[str, list[list[float]]] = {}
+    timings: dict[str, float] = {}
+    device = pick_device()
+
     for target in TARGETS:
         name = f"LSTM ({'price' if target == 'price' else 'returns'})"
         series = {t: build_features(frames[t], target, t) for t in cfg.tickers}
@@ -85,73 +150,24 @@ def run_benchmark(
         importance[name] = []
         t0 = time.perf_counter()
         for k in range(cfg.folds):
-            folds = {
-                t: prepare_fold(s, starts[t][k], cfg.test_days, cfg.seq_len, target)
-                for t, s in series.items()
-            }
-            x_train = np.concatenate([f.x_train for f in folds.values()])
-            y_train = np.concatenate([f.y_train for f in folds.values()])
-            model = train_lstm(
-                x_train,
-                y_train,
-                epochs=cfg.epochs,
-                batch_size=cfg.batch_size,
-                lr=cfg.lr,
-                hidden_size=cfg.hidden_size,
-                seed=cfg.seed + k,
-                device=device,
-            )
-            for t, f in folds.items():
-                s = series[t]
-                pred = to_price(
-                    predict(model, f.x_test), f.scaler, s, f.test_rows, target
-                )
-                record(name, s, k, f.test_rows, pred)
-                if target == "price":
-                    prev = s.prev_close[f.test_rows]
-                    record("Naive", s, k, f.test_rows, prev, with_direction=False)
-                    up = float(np.mean(s.close[f.test_rows] > prev) * 100)
-                    up_days.append({"ticker": t, "fold": k, "always_up": up})
-            x_test = np.concatenate([f.x_test for f in folds.values()])
-            y_test = np.concatenate([f.y_test for f in folds.values()])
-            imp = permutation_importance(
-                lambda x, m=model: predict(m, x),
-                x_test,
-                y_test,
-                repeats=cfg.importance_repeats,
-                seed=cfg.seed + k,
-            )
-            importance[name].append([float(v) for v in imp])
-            log(
-                f"{name} fold {k + 1}/{cfg.folds} done ({len(x_train)} training windows)"
-            )
+            imp, n_train = _lstm_fold(series, starts, k, target, cfg, device, res, name)
+            importance[name].append(imp)
+            log(f"{name} fold {k + 1}/{cfg.folds} done ({n_train} training windows)")
         timings[name] = time.perf_counter() - t0
 
         if target == "price" and chronos is not None:
-            from .chronos_baseline import forecast_next_close
-
             t0 = time.perf_counter()
-            for t, s in series.items():
-                blocks = [np.arange(a, a + cfg.test_days) for a in starts[t]]
-                # Context for day j is every close strictly before day j
-                contexts = [
-                    np.concatenate([s.prev_close[:1], s.close[:j]])
-                    for rows_ in blocks
-                    for j in rows_
-                ]
-                preds = forecast_next_close(chronos, contexts).reshape(cfg.folds, -1)
-                for k, rows_ in enumerate(blocks):
-                    record("Chronos-2", s, k, rows_, preds[k])
+            _chronos_folds(chronos, series, starts, cfg, res)
             timings["Chronos-2"] = time.perf_counter() - t0
             log("Chronos-2 done")
 
     return {
         "config": asdict(cfg),
-        "rows": rows,
-        "always_up": up_days,
+        "rows": res.rows,
+        "always_up": res.up_days,
         "importance": importance,
         "timings_s": timings,
-        "last_fold": last_fold,
+        "last_fold": res.last_fold,
         "env": {
             "smp": __version__,
             "python": platform.python_version(),
@@ -174,6 +190,46 @@ def _pm(mean: float, std: float, fmt: str) -> str:
     if np.isnan(mean):
         return "n/a"
     return f"{mean:{fmt}} ± {std:{fmt}}"
+
+
+def _metric_table(df, models, rows, metric, title, fmt, unit, extra=None) -> list[str]:
+    """One markdown table of mean ± std per stock; extra adds a (header, values) column."""
+    header = models + ([extra[0]] if extra else [])
+    lines = [
+        f"## {title}",
+        "",
+        "| Stock | " + " | ".join(header) + " |",
+        "| --- |" + " ---: |" * len(header),
+    ]
+    for t in rows:
+        sub = df if t == "All" else df[df["ticker"] == t]
+        cells = []
+        for m in models:
+            vals = sub[sub["model"] == m][metric]
+            suffix = "" if np.isnan(vals.mean()) else unit
+            cells.append(_pm(vals.mean(), vals.std(), fmt) + suffix)
+        if extra:
+            vals = extra[1](t)
+            cells.append(_pm(np.mean(vals), np.std(vals, ddof=1), fmt) + unit)
+        lines.append(f"| {t} | " + " | ".join(cells) + " |")
+    lines.append("")
+    return lines
+
+
+def _head_to_head(df, models) -> list[str]:
+    naive = df[df["model"] == "Naive"].set_index(["ticker", "fold"])["rmse"]
+    lines = [
+        "## Head to head against naive",
+        "",
+        "| Model | Stock-folds with lower RMSE than naive |",
+        "| --- | ---: |",
+    ]
+    for m in (m for m in models if m != "Naive"):
+        other = df[df["model"] == m].set_index(["ticker", "fold"])["rmse"]
+        wins = int((other < naive.reindex(other.index)).sum())
+        lines.append(f"| {m} | {wins} of {len(naive)} |")
+    lines.append("")
+    return lines
 
 
 def render_markdown(result: dict) -> str:
@@ -202,36 +258,18 @@ def render_markdown(result: dict) -> str:
         "",
     ]
 
-    def table(metric: str, title: str, fmt: str, unit: str, extra=None):
-        lines.extend(
-            [
-                f"## {title}",
-                "",
-                "| Stock | "
-                + " | ".join(models + ([extra[0]] if extra else []))
-                + " |",
-            ]
-        )
-        lines.append("| --- |" + " ---: |" * (len(models) + (1 if extra else 0)))
-        for t in tickers + ["All"]:
-            sub = df if t == "All" else df[df["ticker"] == t]
-            cells = []
-            for m in models:
-                vals = sub[sub["model"] == m][metric]
-                cells.append(
-                    _pm(vals.mean(), vals.std(), fmt)
-                    + (unit if not np.isnan(vals.mean()) else "")
-                )
-            if extra:
-                vals = extra[1](t)
-                cells.append(_pm(np.mean(vals), np.std(vals, ddof=1), fmt) + unit)
-            lines.append(f"| {t} | " + " | ".join(cells) + " |")
-        lines.append("")
-
     up = pd.DataFrame(result["always_up"])
-    table("rmse", "RMSE (dollars, lower is better)", ".2f", "")
-    table("mape", "MAPE (percent, lower is better)", ".2f", "%")
-    table(
+    rows = tickers + ["All"]
+    lines += _metric_table(
+        df, models, rows, "rmse", "RMSE (dollars, lower is better)", ".2f", ""
+    )
+    lines += _metric_table(
+        df, models, rows, "mape", "MAPE (percent, lower is better)", ".2f", "%"
+    )
+    lines += _metric_table(
+        df,
+        models,
+        rows,
         "direction",
         "Direction accuracy (percent of days up/not-up called right, higher is better)",
         ".1f",
@@ -243,24 +281,7 @@ def render_markdown(result: dict) -> str:
             ].to_numpy(),
         ),
     )
-
-    naive = df[df["model"] == "Naive"].set_index(["ticker", "fold"])["rmse"]
-    total = len(naive)
-    lines.extend(
-        [
-            "## Head to head against naive",
-            "",
-            "| Model | Stock-folds with lower RMSE than naive |",
-            "| --- | ---: |",
-        ]
-    )
-    for m in models:
-        if m == "Naive":
-            continue
-        other = df[df["model"] == m].set_index(["ticker", "fold"])["rmse"]
-        wins = int((other < naive.reindex(other.index)).sum())
-        lines.append(f"| {m} | {wins} of {total} |")
-    lines.append("")
+    lines += _head_to_head(df, models)
 
     lines.extend(
         [
@@ -423,10 +444,14 @@ def main(argv: list[str] | None = None) -> None:
         help="re-render benchmark.md and the charts from a saved benchmark.json",
     )
     a = p.parse_args(argv)
+    # Every path the CLI reads or writes must stay inside the working directory
+    cwd = Path.cwd()
+    out, docs, cache = (inside(x, cwd) for x in (a.out, a.docs, a.cache))
 
     if a.from_json:
-        result = json.loads(a.from_json.read_text(encoding="utf-8"))
-        write_reports(result, a.out, a.docs)
+        saved = inside(a.from_json, cwd)
+        result = json.loads(saved.read_text(encoding="utf-8"))
+        write_reports(result, out, docs)
         return
 
     end = str(date.today()) if a.end == "today" else a.end
@@ -441,7 +466,7 @@ def main(argv: list[str] | None = None) -> None:
         seed=a.seed,
         chronos_model=None if a.no_chronos else a.chronos_model,
     )
-    frames = {t: load_ohlcv(t, cfg.start, cfg.end, a.cache) for t in cfg.tickers}
+    frames = {t: load_ohlcv(t, cfg.start, cfg.end, cache) for t in cfg.tickers}
     chronos = None
     if cfg.chronos_model:
         from .chronos_baseline import load_pipeline
@@ -451,11 +476,11 @@ def main(argv: list[str] | None = None) -> None:
         )
 
     result = run_benchmark(frames, cfg, chronos, log=lambda m: print(m, flush=True))
-    a.out.mkdir(parents=True, exist_ok=True)
-    (a.out / "benchmark.json").write_text(
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "benchmark.json").write_text(
         json.dumps(result, indent=1) + "\n", encoding="utf-8", newline="\n"
     )
-    write_reports(result, a.out, a.docs)
+    write_reports(result, out, docs)
 
 
 def write_reports(result: dict, out: Path, docs: Path) -> None:

@@ -197,6 +197,8 @@ The first run downloads the bars into `data/cache/` (gitignored) and the `amazon
 uv run python -m smp.benchmark --from-json results/benchmark.json
 ```
 
+`--out`, `--docs`, `--cache` and `--from-json` must point inside the directory you run from; anything that resolves outside it, including a ticker like `../x` in the cache file name, stops the run with a `ValueError`.
+
 ### Run the tests
 
 ```bash

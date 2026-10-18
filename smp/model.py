@@ -55,9 +55,10 @@ def train_lstm(
         data,
         batch_size=batch_size,
         shuffle=True,
+        num_workers=0,
         generator=torch.Generator().manual_seed(seed),
     )
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=0)
     loss_fn = nn.MSELoss()
     model.train()
     for _ in range(epochs):

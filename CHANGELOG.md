@@ -4,6 +4,7 @@
 
 - Add the `smp/` package and `python -m smp.benchmark`: walk-forward evaluation over 8 expanding 30-day folds per stock, scoring naive, LSTM on price, LSTM on log returns and zero-shot Chronos-2 on the same days with RMSE, MAPE and direction accuracy (plus an always-up baseline)
 - Commit the measured run in `results/benchmark.{json,md}` and its charts in `docs/`; `--from-json` redraws them without retraining, `--end today` scores current data
+- Benchmark CLI paths (`--out`, `--docs`, `--cache`, `--from-json`) and the per-ticker cache file must resolve inside the working directory, so a crafted argument cannot read or write elsewhere
 - Replace the notebook's placeholder feature chart with permutation importance computed on the held-out windows; the benchmark reports it for both LSTM targets
 - Notebook: mini-batch training (batch 64) with `DataLoader`, a fixed seed, and automatic GPU use; a full headless run now takes about 3 minutes on a laptop CPU instead of about 70
 - Add an offline pytest suite (leakage, fold boundaries, scaling round trip, metrics, seeded training, end-to-end benchmark) and run it in CI

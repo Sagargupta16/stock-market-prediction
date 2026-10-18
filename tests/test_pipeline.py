@@ -49,8 +49,9 @@ def test_build_features_aligns_close_and_prev_close():
 
 
 def test_build_features_rejects_unknown_target():
+    df = random_walk(20)
     with pytest.raises(ValueError):
-        build_features(random_walk(20), "level")
+        build_features(df, "level")
 
 
 def test_fold_starts_are_contiguous_and_end_at_last_row():
