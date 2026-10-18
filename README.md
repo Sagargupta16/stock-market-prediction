@@ -64,7 +64,7 @@ One full run of the notebook on 2026-10-18 (150 epochs, CPU, no fixed seed), sco
 | AMZN | 101.11 | 3.55 | $10.06 | $1.89 |
 | TSLA | 98.90 | 54.02 | $9.94 | $7.35 |
 
-**Naive** predicts each day's close as the previous day's close. On this test window it beats the LSTM on all four stocks. That matches the forecasting literature: daily stock prices are close to a random walk, so last close is a hard baseline to beat, and this repo is a worked example of measuring that honestly rather than a trading signal. AMZN does worst because several of its late-2022 closes fall below anything in its training range, so the model has to extrapolate.
+**Naive** predicts each day's close as the previous day's close. On this test window it beats the LSTM on all four stocks. That matches the forecasting literature: daily stock prices are close to a random walk, so last close is a hard baseline to beat, and this repo is a worked example of measuring that honestly rather than a trading signal. AMZN does worst, likely partly because 3 of its 30 test closes fall below its training range, so the model has to extrapolate.
 
 Before 1.3.0 the notebook trained on the same 30 days it was scored on, so earlier MSE figures from this repo were not out-of-sample.
 
@@ -181,7 +181,7 @@ stock-market-prediction/
 
 ## Limitations
 
-- Training processes one window per step with no batching; 150 epochs took about 70 minutes on a laptop CPU in the 2026-10-18 run (sharing the CPU with a second run). A GPU Colab runtime or mini-batching is much faster.
+- Training processes one window per step with no batching; 150 epochs took about 70 minutes on a laptop CPU in the 2026-10-18 run. A GPU Colab runtime or mini-batching is much faster.
 - The LSTM does not beat the naive baseline on the current test window (see Results).
 - MSE is in dollars squared and comes from a single training run with no fixed seed, so numbers move between runs.
 - The model is never saved; it lives only in the notebook session.

@@ -6,6 +6,7 @@
 - Fit each stock's MinMaxScaler on its training rows only, so the test window's min/max no longer leaks into training
 - Build training windows per ticker instead of over the concatenated series, removing 15 windows that spanned two stocks
 - Print a naive previous-close baseline MSE next to the model MSE for every stock
+- Set `N` and `seq_length` once in the first cell; the evaluation cell no longer re-declares them, so changing `N` cannot bring the leak back
 - Label the moving-average charts as min-max scaled and the feature chart as placeholder values, matching what the code plots
 - Point the notebook's Colab badge at the lowercase repo name
 - CI: add `permissions: contents: read`, install wheels only (`--only-binary :all:`), and compile the notebook code on every push
