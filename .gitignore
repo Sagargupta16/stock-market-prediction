@@ -7,6 +7,8 @@ build/
 .venv/
 venv/
 .ipynb_checkpoints/
+# Script export of the notebook produced by the CI compile step
+/SMP.py
 *.h5
 *.pkl
 *.model
