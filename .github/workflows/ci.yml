@@ -15,7 +15,7 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version-file: .python-version
-      - run: 'pip install --only-binary :all: -r requirements.txt'
+      - run: 'pip install --require-hashes --only-binary :all: -r requirements.txt'
       - name: Compile notebook code
         run: |
           jupyter nbconvert --to python SMP.ipynb

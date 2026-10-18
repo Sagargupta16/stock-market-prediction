@@ -9,7 +9,8 @@
 - Set `N` and `seq_length` once in the first cell; the evaluation cell no longer re-declares them, so changing `N` cannot bring the leak back
 - Label the moving-average charts as min-max scaled and the feature chart as placeholder values, matching what the code plots
 - Point the notebook's Colab badge at the lowercase repo name
-- CI: add `permissions: contents: read`, install wheels only (`--only-binary :all:`), and compile the notebook code on every push
+- CI: add `permissions: contents: read`, install wheels only (`--only-binary :all:`) with hash checking (`--require-hashes`), and compile the notebook code on every push
+- Split dependencies into `requirements.in` (direct pins) and a uv-generated hash-locked `requirements.txt`; Renovate updates them through its pip-compile manager
 - Bump numpy to 2.5.4
 - README: architecture diagram, measured results against the naive baseline, design decisions, limitations, uv setup; drop claims the code did not back (batch training, feature importance analysis, live-trading readiness)
 

@@ -19,7 +19,7 @@ Public repo: [Sagargupta16/stock-market-prediction](https://github.com/Sagargupt
 - **Language**: Python 3.14 (pinned in `.python-version`)
 - **Framework**: PyTorch (nn.LSTM), scikit-learn (MinMaxScaler, MSE), yfinance, pandas, matplotlib
 - **Database**: none -- data fetched live from Yahoo Finance
-- **Package manager**: pip via `requirements.txt` (pinned versions, Renovate monthly)
+- **Package manager**: pip via `requirements.txt`, a uv-generated hash lock of `requirements.in` (Renovate monthly through its pip-compile manager)
 - **Deploy target**: none -- local Jupyter or Google Colab
 
 ## Run
@@ -42,7 +42,8 @@ No test suite. Verification = notebook runs end to end and prints per-stock MSE.
 ## Key files
 
 - `SMP.ipynb` -- all code lives here; there are no `.py` modules
-- `requirements.txt` -- pinned deps (torch, yfinance, pandas, scikit-learn, matplotlib, numpy, jupyter)
+- `requirements.in` -- direct pins (torch, yfinance, pandas, scikit-learn, matplotlib, numpy, jupyter); bump here, then rerun the command in `requirements.txt`'s header
+- `requirements.txt` -- generated `--generate-hashes` lock; CI installs it with `--require-hashes`, so never hand-edit a version in it
 
 ## Gotchas
 

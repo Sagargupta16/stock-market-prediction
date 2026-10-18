@@ -144,9 +144,10 @@ actual_prices, predicted_prices = evaluate_model(test_sequences_aapl, scaler_aap
 ```text
 stock-market-prediction/
 ├── SMP.ipynb                 # Notebook: data fetch, model, training, evaluation, plots
-├── requirements.txt          # Pinned Python dependencies (Renovate keeps them current)
+├── requirements.in           # Direct dependency pins (Renovate keeps them current)
+├── requirements.txt          # Hash-locked full dependency set, generated from requirements.in by uv
 ├── .python-version           # Python 3.14
-├── .github/workflows/ci.yml  # CI: binary-only install + notebook code compile check
+├── .github/workflows/ci.yml  # CI: hash-checked binary-only install + notebook syntax compile (does not run it)
 ├── README.md                 # Project documentation
 ├── CHANGELOG.md              # Release history
 ├── SECURITY.md               # Security policy
