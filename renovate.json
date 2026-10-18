@@ -1,1 +1,14 @@
-{"$schema":"https://docs.renovatebot.com/renovate-schema.json","extends":["github>Sagargupta16/shared-workflows"]}
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["github>Sagargupta16/shared-workflows"],
+  "description": [
+    "requirements.txt is a uv-generated --generate-hashes lock of requirements.in, installed with --require-hashes in .github/workflows/ci.yml.",
+    "The pip_requirements manager would rewrite a pinned version without regenerating its --hash= block, which fails the install, so it is off. The pip-compile manager bumps requirements.in and reruns the command in the lock's header instead."
+  ],
+  "pip_requirements": {
+    "enabled": false
+  },
+  "pip-compile": {
+    "managerFilePatterns": ["/(^|/)requirements\\.txt$/"]
+  }
+}

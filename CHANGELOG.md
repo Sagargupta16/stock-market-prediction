@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.3.0] - 2026-10-18
+
+- Fix train/test leakage: the last 30 test days of each stock were also in the training sequences; training windows now exclude them
+- Fit each stock's MinMaxScaler on its training rows only, so the test window's min/max no longer leaks into training
+- Build training windows per ticker instead of over the concatenated series, removing 15 windows that spanned two stocks
+- Print a naive previous-close baseline MSE next to the model MSE for every stock
+- Set `N` and `seq_length` once in the first cell; the evaluation cell no longer re-declares them, so changing `N` cannot bring the leak back
+- Label the moving-average charts as min-max scaled and the feature chart as placeholder values, matching what the code plots
+- Point the notebook's Colab badge at the lowercase repo name
+- CI: add `permissions: contents: read`, install wheels only (`--only-binary :all:`) with hash checking (`--require-hashes`), and compile the notebook code on every push
+- Split dependencies into `requirements.in` (direct pins) and a uv-generated hash-locked `requirements.txt`; Renovate updates them through its pip-compile manager
+- Bump numpy to 2.5.4
+- README: architecture diagram, measured results against the naive baseline, design decisions, limitations, uv setup; drop claims the code did not back (batch training, feature importance analysis, live-trading readiness)
+
 ## [1.2.1] - 2026-09-03
 
 - Raise torch pin to 2.13.0 to resolve torch.jit.script memory corruption advisory (Dependabot alert #2)

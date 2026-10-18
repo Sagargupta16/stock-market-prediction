@@ -1,0 +1,7 @@
+yfinance==1.7.0
+pandas==3.0.6
+torch==2.14.1
+scikit-learn==1.9.1
+matplotlib==3.11.2
+numpy==2.5.4
+jupyter==1.1.1
